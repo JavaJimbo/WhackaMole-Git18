@@ -1,0 +1,13 @@
+_readEncoderA: CODE, 2118 0 158
+__stringdata: SMALLCONST, 1547 0 43
+_putch: CODE, 2568 0 12
+_dpowers: SMALLCONST, 1537 0 10
+_main: CODE, 2276 0 86
+_DelayMs: CODE, 2510 0 36
+__initialization: CODE, 2546 0 12
+___lwdiv: CODE, 2362 0 82
+_InitializePIC: CODE, 1900 0 218
+_isr: CODE, 8 0 250
+_printf: CODE, 1592 0 308
+___lwmod: CODE, 2444 0 66
+Total: 1281
