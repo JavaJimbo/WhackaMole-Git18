@@ -4,11 +4,9 @@
  *      9-8-16: Copied over Dual Rev 6.1 project
  *      Deleted, removed everything unnecessary
  *      9-9-16: Got Parallax encoder working complete with rotation direction interrupts on change.
- *      9-12-16: Modified on NUC. Uploaded to GIT. 
- *      Downloaded from GIT to laptop. Modified on laptop, uploaded to GIT.
- *      Modified on NUC, uploaded to GIT.
+ *      9-12-16: REVERT to earlier version, Monday.
+ *      
  */
- 
 
 #include <XC.h>
 #include <math.h>
