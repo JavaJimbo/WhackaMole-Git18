@@ -5,6 +5,7 @@
  *      Deleted, removed everything unnecessary
  *      9-9-16: Got Parallax encoder working complete with rotation direction interrupts on change.
  *      9-12-16: REVERT to earlier version, Monday.
+ *      9-13-16: Completed code for basic program, no master/slave communication.
  *      
  */
 
@@ -21,13 +22,19 @@
 #define true TRUE
 #define false FALSE
 
-#define MICROSWITCH_A   PORTbbits.RB1
+#define MICROSWITCH_IN   PORTBbits.RB1
 #define SYNC_IN         PORTBbits.RB6
 
 #define ENCODER_DIRECTION_IN PORTBbits.RB4
 #define ENCODER_COUNTER_IN 
 
 #define ACCELEROMETER_ENABLE LATCbits.LATC5
+
+#define STANDBY 0
+#define RUN 1
+
+#define ONE_SECOND 1000
+#define TWO_SECONDS (ONE_SECOND * 2)
 
 // Watchdog enabled for 2.1 second timeout: 1/(31,250 Hz/128/512) = 2.1 seconds approx, so WDTPS = 512
 // WhackaMole: added CCP3MX = PORTB5, WATCHDOG OFF
@@ -37,17 +44,17 @@ void InitializePIC(void);
 void setDutyPWMOne(unsigned short dutyCycle);
 void setDutyPWMTwo(unsigned short dutyCycle);
 
-short readEncoderA(void);
+short readEncoder(void);
 void resetEncoderA(void);
 
 #define ENCODER_A_MASK 0b00100000
-unsigned char EncoderADirection = 0;
-unsigned short lastCountA = 0;
-unsigned short DelayCounterA = 0; 
-short EncoderAPosition = 0;
-unsigned char Timer2Flag = false;
+unsigned short lastCount = 0;
+unsigned short delayCounter = 0; 
+short position = 0;
+unsigned char Timer4Flag = false;
+unsigned char PORTBreg;
 
-#define RUN_PWM 800 //  was 300
+#define RUN_PWM 100 //  was 300
 #define PWM_MAX 800
 #define TOP_A 800
 
@@ -57,15 +64,75 @@ unsigned char Timer2Flag = false;
 unsigned char encoderDirection = DOWN;
 unsigned char motorDirection = DOWN;
 
-void main() {        
+void main() {      
+    unsigned char Timer4Counter = 0;
+    unsigned char mode = RUN;
+    unsigned short PWMout;
+    
     InitializePIC();
     DelayMs(100);
     printf("\rSTARTING WHACKAMOLE PIC18F25K22");
     TMR3 = 0;
+    
+    if (MICROSWITCH_IN == 0) {
+        position = 0;
+        motorDirection = UP;
+    } else {
+        position = TOP_A;
+        motorDirection = DOWN;
+    }
+    mode = RUN;
+    PWMout = RUN_PWM;     
     while(1){
-        DelayMs(100);
-        EncoderAPosition = EncoderAPosition + readEncoderA();
-        printf ("\rPOS = %d", EncoderAPosition);
+        //DelayMs(100);
+        //position = position + readEncoder();
+        //if (MICROSWITCH_IN) printf ("\rSWITCH UP,  PORTBreg; %x, POS = %d", PORTBreg, position);
+        //else printf ("\rSWITCH DOWN,  PORTBreg; %x, POS = %d", PORTBreg, position);
+        
+        
+        if (Timer4Flag) {
+            Timer4Flag = false;
+            position = position + readEncoder();
+            Timer4Counter++;
+            if (Timer4Counter >= 10) {
+                Timer4Counter = 0;
+                if (mode == RUN) {
+                    if (motorDirection == UP) printf("\rUP POS: %d", position);
+                    else printf("\rDOWN POS: %d", position);
+                } else printf("\rDELAY: %d", delayCounter);
+            }
+            if (!delayCounter && !mode) {
+                mode = RUN;
+                PWMout = RUN_PWM;
+            } else if (position >= TOP_A && motorDirection == UP) {
+                motorDirection = DOWN;
+                PWMout = 0;
+                mode = STANDBY;
+                delayCounter = ONE_SECOND;                
+            } else if ((position <= -32 || MICROSWITCH_IN == 0) && motorDirection == DOWN) {
+                if (MICROSWITCH_IN == 0) position = 0;
+                motorDirection = UP;
+                PWMout = 0;
+                mode = STANDBY;
+                delayCounter = ONE_SECOND;
+            }            
+            
+            if (mode == RUN){                
+                if (motorDirection == UP){
+                    setDutyPWMOne(PWMout);
+                    setDutyPWMTwo(0);
+                }
+                else {
+                    setDutyPWMOne(0);
+                    setDutyPWMTwo(PWMout);                    
+                }
+            }
+            else {
+                setDutyPWMOne(0);
+                setDutyPWMTwo(0);                                    
+           }
+            
+        }
     }
 } // end main()			
 
@@ -110,8 +177,11 @@ void InitializePIC(void) {
     T2CON = 0;
     CCPTMRS0 = 0x00; // C2TSEL<1:0>: CCP2 Timer Selection bits:
     CCPTMRS1 = 0x00; // C4TSEL<1:0>: CCP4 Timer Selection bits: 00 = CCP4 ? PWM mode uses Timer2 THIS IS THE PWM #1 OUTPUT
-    CCP4CON = CCP2CON = 0x00; // At power up, make sure PWM outputs are disabled so that RB0 and RB3 are IO outputs
+    // CCP4CON = CCP2CON = 0x00; // At power up, make sure PWM outputs are disabled so that RB0 and RB3 are IO outputs
     
+    setDutyPWMOne(0);
+    setDutyPWMTwo(0);    
+    CCP4CON = CCP2CON = 0x0C; // Enable PWM outputs on RB0 and RB3
                             // Set up Timer 3 as a counter for Encoder A
     T3CON = 0x00;           // Clear Timer control register
     T3CONbits.T3RD16 = 1;   // Allow 16 bit reads
@@ -223,65 +293,61 @@ void putch(char ch) {
 // clockwise or counter clockwise, 
 // and sets the sign of diffcount accordingly.
 // UP is positive, DOWN is negative.
-short readEncoderA(void) {
+short readEncoder(void) {
     unsigned short newCount, tempCount;
     short diffCount;
 
     newCount = TMR3;
 
-    if (newCount == lastCountA)                         // If motor hasn't moved, return 0
+    if (newCount == lastCount)                         // If motor hasn't moved, return 0
         return (0);
-    else if (newCount > lastCountA)
-        diffCount = (short) (newCount - lastCountA);
+    else if (newCount > lastCount)
+        diffCount = (short) (newCount - lastCount);
     else {                                              // If new count is LESS than last count, then timer must have rolled over.		
-        tempCount = ~lastCountA + 1;                    // If Timer 3 has rolled over since last read, 
+        tempCount = ~lastCount + 1;                    // If Timer 3 has rolled over since last read, 
                                                         // get difference before rollover and add it to new count
         diffCount = (short) (newCount + tempCount);
     }
 
-    lastCountA = newCount;    
+    lastCount = newCount;    
     if (encoderDirection == UP) return (diffCount);
     else return (0 - diffCount);
 }
 
 void resetEncoderA(void) {
     TMR3 = 0x0000;
-    lastCountA = 0;
+    lastCount = 0;
 }
 
 static void interrupt
 isr(void) {
-    static unsigned int T2interruptCounter = 0;    
+    static unsigned int T4intCounter = 0;    
     static unsigned char previousEncoderDirection = DOWN;
-    unsigned char PORTBreg;
+    
     
     if (RBIF){
         RBIF = 0;
         RBIE = 0;
         PORTBreg = PORTB & 0b00110000;        
-        if (PORTBreg == 0x10 || PORTBreg == 0x20) encoderDirection = UP;
-        else if (PORTBreg == 0x00 || PORTBreg == 0x30) encoderDirection = DOWN;
+        if (PORTBreg == 0x10 || PORTBreg == 0x20) encoderDirection = DOWN;
+        else if (PORTBreg == 0x00 || PORTBreg == 0x30) encoderDirection = UP;
         if (previousEncoderDirection != encoderDirection){
             previousEncoderDirection = encoderDirection;
             TMR3 = 0x00;    
-            lastCountA = 0;
+            lastCount = 0;
         }
     }
 
-    if (TMR2IF) {
-        TMR2IF = 0;
-        if (DelayCounterA) DelayCounterA--;
-        T2interruptCounter++;
-        if (T2interruptCounter >= 11) {
-            T2interruptCounter = 0;
-            Timer2Flag = true;
-        }
-    }
-    
-    if (TMR4IF){
+    if (TMR4IF) {
         TMR4IF = 0;
+        if (delayCounter) delayCounter--;
+        T4intCounter++;
+        if (T4intCounter >= 10) {
+            T4intCounter = 0;
+            Timer4Flag = true;
+        }
         RBIE = 1;
-    }
+    }    
 }
 
 
