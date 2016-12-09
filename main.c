@@ -6,7 +6,7 @@
  *      9-9-16: Got Parallax encoder working complete with rotation direction interrupts on change.
  *      9-12-16: REVERT to earlier version, Monday.
  *      9-13-16: Completed code for basic program, no master/slave communication.
- *      
+ *      12-9-16: Github check.
  */
 
 #include <XC.h>
@@ -54,9 +54,9 @@ short position = 0;
 unsigned char Timer4Flag = false;
 unsigned char PORTBreg;
 
-#define RUN_PWM 100 //  was 300
+#define RUN_PWM 300 //  was 300
 #define PWM_MAX 800
-#define TOP_A 800
+#define TOP_A 600
 
 #define DOWN 0
 #define UP 1
@@ -78,29 +78,24 @@ void main() {
         position = 0;
         motorDirection = UP;
     } else {
-        position = TOP_A;
+        position = 800;
         motorDirection = DOWN;
     }
     mode = RUN;
     PWMout = RUN_PWM;     
     while(1){
-        //DelayMs(100);
-        //position = position + readEncoder();
-        //if (MICROSWITCH_IN) printf ("\rSWITCH UP,  PORTBreg; %x, POS = %d", PORTBreg, position);
-        //else printf ("\rSWITCH DOWN,  PORTBreg; %x, POS = %d", PORTBreg, position);
-        
-        
         if (Timer4Flag) {
             Timer4Flag = false;
             position = position + readEncoder();
+            
             Timer4Counter++;
             if (Timer4Counter >= 10) {
-                Timer4Counter = 0;
+                Timer4Counter = 0;                
                 if (mode == RUN) {
-                    if (motorDirection == UP) printf("\rUP POS: %d", position);
-                    else printf("\rDOWN POS: %d", position);
-                } else printf("\rDELAY: %d", delayCounter);
+                    printf("\r%d", position);
+                } // else printf("\rDELAY: %d", delayCounter);
             }
+            
             if (!delayCounter && !mode) {
                 mode = RUN;
                 PWMout = RUN_PWM;
@@ -310,7 +305,7 @@ short readEncoder(void) {
     }
 
     lastCount = newCount;    
-    if (encoderDirection == UP) return (diffCount);
+    if (motorDirection == UP) return (diffCount);
     else return (0 - diffCount);
 }
 
@@ -333,8 +328,8 @@ isr(void) {
         else if (PORTBreg == 0x00 || PORTBreg == 0x30) encoderDirection = UP;
         if (previousEncoderDirection != encoderDirection){
             previousEncoderDirection = encoderDirection;
-            TMR3 = 0x00;    
-            lastCount = 0;
+            //TMR3 = 0x00;    
+            //lastCount = 0;
         }
     }
 
