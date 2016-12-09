@@ -7,6 +7,7 @@
  *      9-12-16: REVERT to earlier version, Monday.
  *      9-13-16: Completed code for basic program, no master/slave communication.
  *      12-9-16: Github check.
+ * 			GITHUB PRACTCE
  */
 
 #include <XC.h>
@@ -71,7 +72,7 @@ void main() {
     
     InitializePIC();
     DelayMs(100);
-    printf("\rSTARTING WHACKAMOLE PIC18F25K22");
+    printf("\rGITHUB PRACTICE");
     TMR3 = 0;
     
     if (MICROSWITCH_IN == 0) {
